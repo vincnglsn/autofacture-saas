@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoFacture - Tableau de Bord</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50 h-screen flex">
+    
+    <!-- Sidebar -->
+    <div class="w-64 bg-indigo-900 text-white flex flex-col">
+        <div class="p-6 text-2xl font-bold border-b border-indigo-800 flex items-center gap-2">
+            <i class="fa-solid fa-file-invoice-dollar"></i> AutoFacture
+        </div>
+        <div class="p-4 flex-1">
+            <ul class="space-y-2">
+                <li class="bg-indigo-800 p-3 rounded-lg cursor-pointer flex items-center gap-3">
+                    <i class="fa-solid fa-upload"></i> Traiter une facture
+                </li>
+                <li class="p-3 hover:bg-indigo-800 rounded-lg cursor-pointer flex items-center gap-3">
+                    <i class="fa-solid fa-history"></i> Historique
+                </li>
+                <li class="p-3 hover:bg-indigo-800 rounded-lg cursor-pointer flex items-center gap-3">
+                    <i class="fa-solid fa-cog"></i> Paramètres
+                </li>
+            </ul>
+        </div>
+        <div class="p-4 border-t border-indigo-800 text-sm">
+            <p class="mb-3">Plan actuel : <span class="font-bold text-gray-400">Gratuit (Limité)</span></p>
+            <button onclick="subscribeStripe()" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded shadow transition flex items-center justify-center gap-2">
+                <i class="fa-solid fa-lock"></i> S'abonner (49€/m)
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col">
+        <!-- Header -->
+        <div class="bg-white p-6 shadow-sm flex justify-between items-center">
+            <h1 class="text-2xl font-semibold text-gray-800">Extraction par IA</h1>
+            <div class="flex items-center gap-4">
+                <span class="text-gray-500">Agence Immo Dupont</span>
+                <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-800 font-bold">AD</div>
+            </div>
+        </div>
+
+        <!-- Dashboard Content -->
+        <div class="p-8 flex-1 overflow-y-auto">
+            <div class="max-w-4xl mx-auto space-y-6">
+                
+                <!-- Alert Banner for Stripe -->
+                <div id="stripe-alert" class="hidden bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6 rounded shadow-sm" role="alert">
+                    <p class="font-bold">Paiement réussi !</p>
+                    <p>Merci pour votre abonnement. Votre compte AutoFacture Pro est désormais actif.</p>
+                </div>
+
+                <!-- Upload Area -->
+                <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <h2 class="text-lg font-medium text-gray-700 mb-4">Glissez une facture PDF ici</h2>
+                    
+                    <div id="dropzone" class="border-2 border-dashed border-indigo-200 rounded-xl p-12 hover:bg-indigo-50 transition cursor-pointer flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-cloud-arrow-up text-5xl text-indigo-400 mb-4"></i>
+                        <p class="text-gray-600 mb-2">Cliquez ou glissez pour sélectionner un fichier</p>
+                        <input type="file" id="fileInput" class="hidden" accept=".pdf">
+                        <button onclick="document.getElementById('fileInput').click()" class="mt-4 bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700 transition">
+                            Parcourir les fichiers
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Loading State -->
+                <div id="loading" class="hidden bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
+                    <i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-600 mb-4"></i>
+                    <p class="text-gray-600 font-medium">L'IA analyse la facture en cours...</p>
+                </div>
+
+                <!-- Result Area -->
+                <div id="result" class="hidden bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="bg-green-50 border-b border-green-100 p-4 flex items-center gap-3">
+                        <i class="fa-solid fa-check-circle text-green-600 text-xl"></i>
+                        <h3 class="font-semibold text-green-800">Extraction réussie !</h3>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-2 gap-6">
+                            <div>
+                                <p class="text-sm text-gray-500 mb-1">Artisan</p>
+                                <p id="res-artisan" class="font-semibold text-gray-800 text-lg">-</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 mb-1">Client facturé</p>
+                                <p id="res-client" class="font-semibold text-gray-800 text-lg">-</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 mb-1">Date de la facture</p>
+                                <p id="res-date" class="font-medium text-gray-800">-</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 mb-1">TVA</p>
+                                <p id="res-tva" class="font-medium text-gray-800">-</p>
+                            </div>
+                        </div>
+                        <div class="mt-6 pt-6 border-t border-gray-100 flex gap-12">
+                            <div>
+                                <p class="text-sm text-gray-500 mb-1">Montant HT</p>
+                                <p id="res-ht" class="font-bold text-gray-800 text-2xl">-</p>
+                            </div>
+                            <div>
+                                <p class="text-sm text-gray-500 mb-1">Montant TTC</p>
+                                <p id="res-ttc" class="font-bold text-indigo-600 text-2xl">-</p>
+                            </div>
+                        </div>
+                        <div class="mt-8 flex gap-4">
+                            <button class="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-medium hover:bg-indigo-100 transition w-full">
+                                <i class="fa-solid fa-download mr-2"></i> Exporter en Excel
+                            </button>
+                            <button class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition w-full">
+                                <i class="fa-solid fa-paper-plane mr-2"></i> Envoyer au logiciel comptable
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. Gestion de Stripe ---
+        // Vérifier si on revient d'un paiement Stripe réussi
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('success') === 'true') {
+            document.getElementById('stripe-alert').classList.remove('hidden');
+            // Enlever les paramètres de l'URL pour faire propre
+            window.history.replaceState({}, document.title, "/");
+        }
+        if (urlParams.get('canceled') === 'true') {
+            alert("Paiement annulé. Vous pouvez réessayer quand vous le souhaitez.");
+            window.history.replaceState({}, document.title, "/");
+        }
+
+        async function subscribeStripe() {
+            try {
+                const response = await fetch('/api/create-checkout-session', { method: 'POST' });
+                const data = await response.json();
+                if (data.url) {
+                    window.location.href = data.url; // Redirection vers la page de paiement sécurisée Stripe
+                } else {
+                    alert("Erreur: " + (data.detail || "Impossible de contacter Stripe."));
+                }
+            } catch (error) {
+                alert("Erreur de connexion lors de l'appel à Stripe.");
+            }
+        }
+
+        // --- 2. Gestion de l'IA (Factures) ---
+        const fileInput = document.getElementById('fileInput');
+        const loading = document.getElementById('loading');
+        const result = document.getElementById('result');
+
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            result.classList.add('hidden');
+            loading.classList.remove('hidden');
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                const response = await fetch('/api/extract-invoice', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+                
+                if(data.status === "success") {
+                    document.getElementById('res-artisan').innerText = data.data.artisan_nom;
+                    document.getElementById('res-client').innerText = data.data.client_nom;
+                    document.getElementById('res-date').innerText = data.data.date_facture;
+                    document.getElementById('res-tva').innerText = data.data.tva + ' €';
+                    document.getElementById('res-ht').innerText = data.data.montant_ht + ' €';
+                    document.getElementById('res-ttc').innerText = data.data.montant_ttc + ' €';
+                    
+                    loading.classList.add('hidden');
+                    result.classList.remove('hidden');
+                } else {
+                    alert("Erreur: " + data.detail);
+                    loading.classList.add('hidden');
+                }
+            } catch (error) {
+                alert("Erreur de connexion.");
+                loading.classList.add('hidden');
+            }
+        });
+    </script>
+</body>
+</html>
