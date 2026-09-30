@@ -4,3 +4,5 @@ openai
 python-multipart
 pypdf
 python-dotenv
+
+stripe
