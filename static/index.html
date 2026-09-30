@@ -16,13 +16,13 @@
         </div>
         <div class="p-4 flex-1">
             <ul class="space-y-2">
-                <li class="bg-indigo-800 p-3 rounded-lg cursor-pointer flex items-center gap-3">
+                <li id="tab-upload" onclick="switchTab('upload')" class="bg-indigo-800 p-3 rounded-lg cursor-pointer flex items-center gap-3">
                     <i class="fa-solid fa-upload"></i> Traiter une facture
                 </li>
-                <li class="p-3 hover:bg-indigo-800 rounded-lg cursor-pointer flex items-center gap-3">
+                <li id="tab-history" onclick="switchTab('history'); loadHistory();" class="p-3 hover:bg-indigo-800 rounded-lg cursor-pointer flex items-center gap-3">
                     <i class="fa-solid fa-history"></i> Historique
                 </li>
-                <li class="p-3 hover:bg-indigo-800 rounded-lg cursor-pointer flex items-center gap-3">
+                <li class="p-3 hover:bg-indigo-800 rounded-lg cursor-pointer flex items-center gap-3 opacity-50">
                     <i class="fa-solid fa-cog"></i> Paramètres
                 </li>
             </ul>
@@ -39,7 +39,7 @@
     <div class="flex-1 flex flex-col">
         <!-- Header -->
         <div class="bg-white p-6 shadow-sm flex justify-between items-center">
-            <h1 class="text-2xl font-semibold text-gray-800">Extraction par IA</h1>
+            <h1 id="page-title" class="text-2xl font-semibold text-gray-800">Extraction par IA</h1>
             <div class="flex items-center gap-4">
                 <span class="text-gray-500">Agence Immo Dupont</span>
                 <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-800 font-bold">AD</div>
@@ -51,73 +51,91 @@
             <div class="max-w-4xl mx-auto space-y-6">
                 
                 <!-- Alert Banner for Stripe -->
-                <div id="stripe-alert" class="hidden bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6 rounded shadow-sm" role="alert">
+                <div id="stripe-alert" class="hidden bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-6 rounded shadow-sm">
                     <p class="font-bold">Paiement réussi !</p>
                     <p>Merci pour votre abonnement. Votre compte AutoFacture Pro est désormais actif.</p>
                 </div>
 
-                <!-- Upload Area -->
-                <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
-                    <h2 class="text-lg font-medium text-gray-700 mb-4">Glissez une facture PDF ici</h2>
-                    
-                    <div id="dropzone" class="border-2 border-dashed border-indigo-200 rounded-xl p-12 hover:bg-indigo-50 transition cursor-pointer flex flex-col items-center justify-center">
-                        <i class="fa-solid fa-cloud-arrow-up text-5xl text-indigo-400 mb-4"></i>
-                        <p class="text-gray-600 mb-2">Cliquez ou glissez pour sélectionner un fichier</p>
-                        <input type="file" id="fileInput" class="hidden" accept=".pdf">
-                        <button onclick="document.getElementById('fileInput').click()" class="mt-4 bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700 transition">
-                            Parcourir les fichiers
-                        </button>
+                <!-- === VIEW 1: UPLOAD === -->
+                <div id="view-upload">
+                    <!-- Upload Area -->
+                    <div class="bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center mb-6">
+                        <h2 class="text-lg font-medium text-gray-700 mb-4">Glissez une facture PDF ici</h2>
+                        
+                        <div id="dropzone" class="border-2 border-dashed border-indigo-200 rounded-xl p-12 hover:bg-indigo-50 transition cursor-pointer flex flex-col items-center justify-center">
+                            <i class="fa-solid fa-cloud-arrow-up text-5xl text-indigo-400 mb-4"></i>
+                            <p class="text-gray-600 mb-2">Cliquez ou glissez pour sélectionner un fichier</p>
+                            <input type="file" id="fileInput" class="hidden" accept=".pdf">
+                            <button onclick="document.getElementById('fileInput').click()" class="mt-4 bg-indigo-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-indigo-700 transition">
+                                Parcourir les fichiers
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Loading State -->
+                    <div id="loading" class="hidden bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center mb-6">
+                        <i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-600 mb-4"></i>
+                        <p class="text-gray-600 font-medium">L'IA analyse la facture et sauvegarde dans la base de données...</p>
+                    </div>
+
+                    <!-- Result Area -->
+                    <div id="result" class="hidden bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div class="bg-green-50 border-b border-green-100 p-4 flex items-center gap-3">
+                            <i class="fa-solid fa-check-circle text-green-600 text-xl"></i>
+                            <h3 class="font-semibold text-green-800">Extraction réussie !</h3>
+                        </div>
+                        <div class="p-6">
+                            <div class="grid grid-cols-2 gap-6">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">Artisan</p>
+                                    <p id="res-artisan" class="font-semibold text-gray-800 text-lg">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">Client facturé</p>
+                                    <p id="res-client" class="font-semibold text-gray-800 text-lg">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">Date de la facture</p>
+                                    <p id="res-date" class="font-medium text-gray-800">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">TVA</p>
+                                    <p id="res-tva" class="font-medium text-gray-800">-</p>
+                                </div>
+                            </div>
+                            <div class="mt-6 pt-6 border-t border-gray-100 flex gap-12">
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">Montant HT</p>
+                                    <p id="res-ht" class="font-bold text-gray-800 text-2xl">-</p>
+                                </div>
+                                <div>
+                                    <p class="text-sm text-gray-500 mb-1">Montant TTC</p>
+                                    <p id="res-ttc" class="font-bold text-indigo-600 text-2xl">-</p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Loading State -->
-                <div id="loading" class="hidden bg-white p-8 rounded-xl shadow-sm border border-gray-100 text-center">
-                    <i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-600 mb-4"></i>
-                    <p class="text-gray-600 font-medium">L'IA analyse la facture en cours...</p>
-                </div>
-
-                <!-- Result Area -->
-                <div id="result" class="hidden bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div class="bg-green-50 border-b border-green-100 p-4 flex items-center gap-3">
-                        <i class="fa-solid fa-check-circle text-green-600 text-xl"></i>
-                        <h3 class="font-semibold text-green-800">Extraction réussie !</h3>
-                    </div>
-                    <div class="p-6">
-                        <div class="grid grid-cols-2 gap-6">
-                            <div>
-                                <p class="text-sm text-gray-500 mb-1">Artisan</p>
-                                <p id="res-artisan" class="font-semibold text-gray-800 text-lg">-</p>
-                            </div>
-                            <div>
-                                <p class="text-sm text-gray-500 mb-1">Client facturé</p>
-                                <p id="res-client" class="font-semibold text-gray-800 text-lg">-</p>
-                            </div>
-                            <div>
-                                <p class="text-sm text-gray-500 mb-1">Date de la facture</p>
-                                <p id="res-date" class="font-medium text-gray-800">-</p>
-                            </div>
-                            <div>
-                                <p class="text-sm text-gray-500 mb-1">TVA</p>
-                                <p id="res-tva" class="font-medium text-gray-800">-</p>
-                            </div>
-                        </div>
-                        <div class="mt-6 pt-6 border-t border-gray-100 flex gap-12">
-                            <div>
-                                <p class="text-sm text-gray-500 mb-1">Montant HT</p>
-                                <p id="res-ht" class="font-bold text-gray-800 text-2xl">-</p>
-                            </div>
-                            <div>
-                                <p class="text-sm text-gray-500 mb-1">Montant TTC</p>
-                                <p id="res-ttc" class="font-bold text-indigo-600 text-2xl">-</p>
-                            </div>
-                        </div>
-                        <div class="mt-8 flex gap-4">
-                            <button class="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg font-medium hover:bg-indigo-100 transition w-full">
-                                <i class="fa-solid fa-download mr-2"></i> Exporter en Excel
-                            </button>
-                            <button class="bg-indigo-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-indigo-700 transition w-full">
-                                <i class="fa-solid fa-paper-plane mr-2"></i> Envoyer au logiciel comptable
-                            </button>
+                <!-- === VIEW 2: HISTORY === -->
+                <div id="view-history" class="hidden">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-gray-50 border-b border-gray-100">
+                                    <th class="p-4 text-sm font-semibold text-gray-600">Date Ajout</th>
+                                    <th class="p-4 text-sm font-semibold text-gray-600">Fichier</th>
+                                    <th class="p-4 text-sm font-semibold text-gray-600">Artisan</th>
+                                    <th class="p-4 text-sm font-semibold text-gray-600">Client</th>
+                                    <th class="p-4 text-sm font-semibold text-gray-600">Montant TTC</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-table-body" class="divide-y divide-gray-100">
+                                <!-- Lignes insérées par JS -->
+                            </tbody>
+                        </table>
+                        <div id="history-empty" class="hidden p-8 text-center text-gray-500">
+                            Aucune facture traitée pour le moment.
                         </div>
                     </div>
                 </div>
@@ -127,34 +145,81 @@
     </div>
 
     <script>
-        // --- 1. Gestion de Stripe ---
-        // Vérifier si on revient d'un paiement Stripe réussi
+        // --- Navigation ---
+        function switchTab(tab) {
+            document.getElementById('view-upload').classList.add('hidden');
+            document.getElementById('view-history').classList.add('hidden');
+            
+            document.getElementById('tab-upload').classList.remove('bg-indigo-800');
+            document.getElementById('tab-history').classList.remove('bg-indigo-800');
+
+            if(tab === 'upload') {
+                document.getElementById('view-upload').classList.remove('hidden');
+                document.getElementById('tab-upload').classList.add('bg-indigo-800');
+                document.getElementById('page-title').innerText = "Extraction par IA";
+            } else {
+                document.getElementById('view-history').classList.remove('hidden');
+                document.getElementById('tab-history').classList.add('bg-indigo-800');
+                document.getElementById('page-title').innerText = "Historique des factures";
+            }
+        }
+
+        // --- History ---
+        async function loadHistory() {
+            const tbody = document.getElementById('history-table-body');
+            const emptyState = document.getElementById('history-empty');
+            tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center"><i class="fa-solid fa-spinner fa-spin"></i> Chargement...</td></tr>';
+            
+            try {
+                const response = await fetch('/api/history');
+                const result = await response.json();
+                
+                if (result.status === 'success' && result.data.length > 0) {
+                    tbody.innerHTML = '';
+                    emptyState.classList.add('hidden');
+                    
+                    result.data.forEach(invoice => {
+                        const date = new Date(invoice.created_at).toLocaleDateString('fr-FR');
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-gray-50">
+                                <td class="p-4 text-sm text-gray-600">${date}</td>
+                                <td class="p-4 text-sm font-medium text-indigo-600"><i class="fa-regular fa-file-pdf mr-1"></i> ${invoice.filename || 'facture.pdf'}</td>
+                                <td class="p-4 text-sm text-gray-800">${invoice.artisan_nom}</td>
+                                <td class="p-4 text-sm text-gray-800">${invoice.client_nom}</td>
+                                <td class="p-4 text-sm font-bold text-gray-800">${invoice.montant_ttc} €</td>
+                            </tr>
+                        `;
+                    });
+                } else {
+                    tbody.innerHTML = '';
+                    emptyState.classList.remove('hidden');
+                }
+            } catch (e) {
+                tbody.innerHTML = '';
+                emptyState.innerText = "Erreur de connexion à la base de données.";
+                emptyState.classList.remove('hidden');
+            }
+        }
+
+        // --- Stripe ---
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.get('success') === 'true') {
             document.getElementById('stripe-alert').classList.remove('hidden');
-            // Enlever les paramètres de l'URL pour faire propre
             window.history.replaceState({}, document.title, "/");
         }
-        if (urlParams.get('canceled') === 'true') {
-            alert("Paiement annulé. Vous pouvez réessayer quand vous le souhaitez.");
-            window.history.replaceState({}, document.title, "/");
-        }
-
+        
         async function subscribeStripe() {
             try {
                 const response = await fetch('/api/create-checkout-session', { method: 'POST' });
                 const data = await response.json();
-                if (data.url) {
-                    window.location.href = data.url; // Redirection vers la page de paiement sécurisée Stripe
-                } else {
-                    alert("Erreur: " + (data.detail || "Impossible de contacter Stripe."));
-                }
+                if (data.url) window.location.href = data.url;
+                else alert("Erreur: " + data.detail);
             } catch (error) {
                 alert("Erreur de connexion lors de l'appel à Stripe.");
             }
         }
 
-        // --- 2. Gestion de l'IA (Factures) ---
+        // --- Upload ---
         const fileInput = document.getElementById('fileInput');
         const loading = document.getElementById('loading');
         const result = document.getElementById('result');

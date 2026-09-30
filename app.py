@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from pypdf import PdfReader
 from openai import OpenAI
 from dotenv import load_dotenv
+from supabase import create_client, Client
 
 # Load environment variables
 load_dotenv()
@@ -30,17 +31,19 @@ app.add_middleware(
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
+# Initialize Supabase
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_KEY")
+supabase: Client = create_client(supabase_url, supabase_key) if supabase_url and supabase_key else None
+
 @app.get("/")
 def read_root():
     return FileResponse("static/index.html")
 
 @app.post("/api/create-checkout-session")
 async def create_checkout_session():
-    """
-    Crée une session de paiement Stripe pour l'abonnement à 49€/mois.
-    """
     if not stripe.api_key or stripe.api_key == "sk_test_votre_cle_test_stripe_ici":
-        raise HTTPException(status_code=400, detail="Clé API Stripe non configurée dans le fichier .env")
+        raise HTTPException(status_code=400, detail="Clé API Stripe non configurée.")
         
     try:
         checkout_session = stripe.checkout.Session.create(
@@ -48,7 +51,7 @@ async def create_checkout_session():
                 {
                     'price_data': {
                         'currency': 'eur',
-                        'unit_amount': 4900, # 49.00 EUR (en centimes)
+                        'unit_amount': 4900,
                         'product_data': {
                             'name': 'AutoFacture Pro (Mensuel)',
                             'description': 'Extraction illimitée de factures avec notre IA',
@@ -59,7 +62,6 @@ async def create_checkout_session():
                 },
             ],
             mode='subscription',
-            # En production, on utiliserait le vrai nom de domaine
             success_url='http://localhost:8000/?success=true',
             cancel_url='http://localhost:8000/?canceled=true',
         )
@@ -105,6 +107,28 @@ async def extract_invoice(file: UploadFile = File(...)):
 
         extracted_data = json.loads(response.choices[0].message.content)
         
+        # Save to Database if Supabase is configured
+        if supabase:
+            try:
+                # Convertir les chaînes en nombres si besoin
+                def to_float(val):
+                    if isinstance(val, (int, float)): return float(val)
+                    try: return float(str(val).replace('€', '').replace(',', '.').strip())
+                    except: return 0.0
+
+                supabase.table('invoices').insert({
+                    "filename": file.filename,
+                    "artisan_nom": extracted_data.get("artisan_nom", "Inconnu"),
+                    "client_nom": extracted_data.get("client_nom", "Inconnu"),
+                    "date_facture": extracted_data.get("date_facture", ""),
+                    "montant_ht": to_float(extracted_data.get("montant_ht", 0)),
+                    "montant_ttc": to_float(extracted_data.get("montant_ttc", 0)),
+                    "tva": to_float(extracted_data.get("tva", 0))
+                }).execute()
+            except Exception as db_err:
+                print(f"Erreur DB: {db_err}")
+                # We don't fail the request if DB insert fails
+        
         return {
             "status": "success",
             "filename": file.filename,
@@ -113,3 +137,17 @@ async def extract_invoice(file: UploadFile = File(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
+
+@app.get("/api/history")
+def get_history():
+    """
+    Récupère l'historique des factures depuis Supabase.
+    """
+    if not supabase:
+        return {"status": "error", "detail": "Supabase n'est pas configuré."}
+    
+    try:
+        response = supabase.table('invoices').select("*").order("created_at", desc=True).execute()
+        return {"status": "success", "data": response.data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
