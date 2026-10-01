@@ -53,7 +53,7 @@ def extract_json_from_gemini(text_content: str):
     Texte de la facture :
     {text_content}
     """
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     response = model.generate_content(prompt)
     
     raw_response = response.text.strip()
