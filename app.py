@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pypdf import PdfReader
-from openai import OpenAI
+import google.generativeai as genai
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -28,7 +28,7 @@ app.add_middleware(
 )
 
 # Initialize API Clients
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
 
 # Initialize Supabase
@@ -84,7 +84,10 @@ async def extract_invoice(file: UploadFile = File(...)):
             raise HTTPException(status_code=400, detail="Impossible d'extraire le texte.")
 
         prompt = f"""
-        Tu es un assistant comptable expert. Analyse le texte de cette facture et extrais les informations au format JSON :
+        Tu es un assistant comptable expert. Analyse le texte de cette facture et extrais les informations au format JSON strict.
+        Ne renvoie RIEN D'AUTRE que l'objet JSON (pas de markdown, pas de texte avant ou après).
+        
+        Les clés du JSON doivent être exactement :
         - artisan_nom: (nom)
         - client_nom: (nom)
         - date_facture: (format YYYY-MM-DD)
@@ -92,25 +95,28 @@ async def extract_invoice(file: UploadFile = File(...)):
         - montant_ttc: (nombre)
         - tva: (nombre)
         
-        Texte :
+        Texte de la facture :
         {text_content}
         """
 
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Tu dois répondre UNIQUEMENT avec un objet JSON valide."},
-                {"role": "user", "content": prompt}
-            ],
-            response_format={ "type": "json_object" }
-        )
-
-        extracted_data = json.loads(response.choices[0].message.content)
+        # Utilisation de l'IA Google Gemini (Gratuite)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        
+        # Nettoyage de la réponse (au cas où Gemini rajoute des balises markdown ```json)
+        raw_response = response.text.strip()
+        if raw_response.startswith("```json"):
+            raw_response = raw_response[7:]
+        if raw_response.startswith("```"):
+            raw_response = raw_response[3:]
+        if raw_response.endswith("```"):
+            raw_response = raw_response[:-3]
+            
+        extracted_data = json.loads(raw_response.strip())
         
         # Save to Database if Supabase is configured
         if supabase:
             try:
-                # Convertir les chaînes en nombres si besoin
                 def to_float(val):
                     if isinstance(val, (int, float)): return float(val)
                     try: return float(str(val).replace('€', '').replace(',', '.').strip())
@@ -127,7 +133,6 @@ async def extract_invoice(file: UploadFile = File(...)):
                 }).execute()
             except Exception as db_err:
                 print(f"Erreur DB: {db_err}")
-                # We don't fail the request if DB insert fails
         
         return {
             "status": "success",
@@ -136,13 +141,10 @@ async def extract_invoice(file: UploadFile = File(...)):
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Erreur : {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erreur avec Gemini : {str(e)}")
 
 @app.get("/api/history")
 def get_history():
-    """
-    Récupère l'historique des factures depuis Supabase.
-    """
     if not supabase:
         return {"status": "error", "detail": "Supabase n'est pas configuré."}
     
