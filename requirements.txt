@@ -8,3 +8,12 @@ python-dotenv
 stripe
 
 supabase
+
+googlesearch-python
+requests
+beautifulsoup4
+
+duckduckgo-search
+
+google-generativeai
+ddgs
